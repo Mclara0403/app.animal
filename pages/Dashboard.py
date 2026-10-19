@@ -7,7 +7,7 @@ import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 from openpyxl import load_workbook
-import excel
+
 # ==========================================================
 # DINOPETANIMAL PRO
 # PÁGINA: DASHBOARD
