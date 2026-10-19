@@ -113,16 +113,137 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+
 # ==========================================================
 # DADOS DO SISTEMA
 # ==========================================================
 
-try:
-    from excel import resumo_sistema, sistema_saudavel, sobre
+from openpyxl import load_workbook
 
+
+def texto_limpo(valor):
+    if valor is None:
+        return ""
+    return " ".join(str(valor).strip().split())
+
+
+def ler_campo(ws, rotulo, coluna=2, padrao=""):
+    procurado = texto_limpo(rotulo).casefold()
+
+    for linha in range(1, ws.max_row + 1):
+        atual = texto_limpo(ws.cell(linha, 1).value).casefold()
+
+        if atual == procurado:
+            valor = ws.cell(linha, coluna).value
+            return padrao if valor is None else valor
+
+    return padrao
+
+
+def resumo_sistema():
+    arquivos = sorted(
+        [
+            arquivo
+            for arquivo in PASTA_PETS.glob("*.xlsx")
+            if not arquivo.name.startswith("~$")
+        ],
+        key=lambda arquivo: arquivo.stat().st_mtime,
+        reverse=True,
+    )
+
+    nomes = []
+    especies = set()
+    tutores = set()
+    pesos = []
+    ultimo_pet = "-"
+
+    for arquivo in arquivos:
+        wb = None
+
+        try:
+            wb = load_workbook(
+                arquivo,
+                read_only=True,
+                data_only=True,
+            )
+
+            if "Cadastro" not in wb.sheetnames:
+                continue
+
+            ws = wb["Cadastro"]
+
+            nome = texto_limpo(
+                ler_campo(ws, "Nome do Pet", 2, arquivo.stem)
+            )
+            especie = texto_limpo(ler_campo(ws, "Espécie"))
+            tutor = texto_limpo(ler_campo(ws, "Tutor"))
+            peso_valor = ler_campo(ws, "Peso (kg)", 2, 0)
+
+            if nome:
+                nomes.append(nome)
+
+            if especie:
+                especies.add(especie.casefold())
+
+            if tutor:
+                tutores.add(tutor.casefold())
+
+            try:
+                peso = float(peso_valor)
+                if peso > 0:
+                    pesos.append(peso)
+            except (TypeError, ValueError):
+                pass
+
+        except Exception:
+            # Ignora planilhas inválidas sem interromper a página.
+            continue
+
+        finally:
+            if wb is not None:
+                wb.close()
+
+    if arquivos:
+        ultimo_pet = arquivos[0].stem
+
+    relatorios = sum(
+        1
+        for arquivo in PASTA_RELATORIOS.iterdir()
+        if arquivo.is_file() and arquivo.suffix.lower() == ".pdf"
+    )
+
+    return {
+        "pets": len(nomes),
+        "ultimo_pet": ultimo_pet,
+        "especies": len(especies),
+        "tutores": len(tutores),
+        "relatorios": relatorios,
+        "peso_medio": round(sum(pesos) / len(pesos), 2)
+        if pesos else 0,
+    }
+
+
+def sistema_saudavel():
+    return (
+        PASTA_PETS.is_dir()
+        and PASTA_RELATORIOS.is_dir()
+        and MODELO_PET.exists()
+    )
+
+
+def sobre():
+    return {
+        "sistema": "DinoPetAnimal PRO",
+        "versao": "2.0",
+        "autor": "Professor Dinaldo Guedes",
+    }
+
+
+try:
     resumo = resumo_sistema()
     sistema_ok = sistema_saudavel()
     informacoes = sobre()
+    erro_sistema = None
 
 except Exception as erro:
     resumo = {
@@ -134,15 +255,8 @@ except Exception as erro:
         "peso_medio": 0,
     }
     sistema_ok = False
-    informacoes = {
-        "sistema": "DinoPetAnimal PRO",
-        "versao": "1.0",
-        "autor": "Professor Dinaldo Guedes",
-    }
+    informacoes = sobre()
     erro_sistema = erro
-else:
-    erro_sistema = None
-
 # ==========================================================
 # BANNER
 # ==========================================================
